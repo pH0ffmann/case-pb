@@ -1,11 +1,11 @@
 # Governança de repositório — donos técnicos por área.
 
-/terraform/                    @org/platform-team @org/security-team
-/policy/                       @org/security-team
-/.github/workflows/            @org/security-team
-/target-app/src/auth/          @org/security-team @org/backend-leads
+/terraform/                    @pH0ffmann
+/policy/                       @pH0ffmann
+/.github/workflows/            @pH0ffmann
+/target-app/src/auth/          @pH0ffmann
 
-/SECURITY.md                   @org/security-team
-/.github/CODEOWNERS            @org/security-team
+/SECURITY.md                   @pH0ffmann
+/.github/CODEOWNERS            @pH0ffmann
 
-*                               @org/app-team
+*                               @pH0ffmann
