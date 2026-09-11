@@ -29,8 +29,9 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # ---------------------------------------------------------------------
-  # 2) SAST
+  # 2) SAST — CLI direto (evita quebra de actions de terceiro desatualizadas)
   # ---------------------------------------------------------------------
   sast:
     name: SAST (Semgrep)
@@ -42,6 +43,8 @@ jobs:
         run: |
           pip install semgrep
           semgrep scan --config p/owasp-top-ten target-app/ --error
+        # --error: retorna código de saída != 0 (falha o job) se houver findings.
+
   # ---------------------------------------------------------------------
   # 3) SCA + SBOM — geração de inventário de componentes, não só CVE conhecida
   # ---------------------------------------------------------------------
@@ -51,12 +54,12 @@ jobs:
     needs: secrets-scan
     steps:
       - uses: actions/checkout@v4
-      - name: OSV-Scanner (vulnerabilidades conhecidas)
-        uses: google/osv-scanner-action@v1
-        with:
-          scan-args: |-
-            --recursive
-            target-app/
+      - name: Instalar OSV-Scanner
+        run: |
+          curl -sSfL https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64 -o /usr/local/bin/osv-scanner
+          chmod +x /usr/local/bin/osv-scanner
+      - name: Rodar OSV-Scanner
+        run: osv-scanner scan -r target-app/
         # Falha em CVE alta/crítica com exploit conhecido (KEV). Média/baixa
         # vira issue no backlog (ver SECURITY.md).
       - name: Gerar SBOM (Syft, formato CycloneDX)
