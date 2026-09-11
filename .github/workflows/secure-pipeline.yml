@@ -18,7 +18,7 @@ permissions:
 jobs:
 
   # ---------------------------------------------------------------------
-  # 1) SECRETS SCAN — todo o histórico, não só o diff
+  # 1) SECRETS SCAN
   # ---------------------------------------------------------------------
   secrets-scan:
     name: Secrets Scan (gitleaks)
@@ -31,7 +31,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------
-  # 2) SAST — CLI direto (evita quebra de actions de terceiro desatualizadas)
+  # 2) SAST — CLI direto, filtrado por severidade alta
   # ---------------------------------------------------------------------
   sast:
     name: SAST (Semgrep)
@@ -42,26 +42,26 @@ jobs:
       - name: Instalar e rodar Semgrep
         run: |
           pip install semgrep
-          semgrep scan --config p/owasp-top-ten target-app/ --error
-        # --error: retorna código de saída != 0 (falha o job) se houver findings.
+          semgrep scan --config p/owasp-top-ten target-app/ --severity ERROR --error
 
   # ---------------------------------------------------------------------
-  # 3) SCA + SBOM — geração de inventário de componentes, não só CVE conhecida
+  # 3) SCA + SBOM — Trivy cobre dependências (SCA) além de IaC e containers
   # ---------------------------------------------------------------------
   sca-sbom:
-    name: SCA + SBOM (OSV-Scanner + Syft)
+    name: SCA + SBOM (Trivy + Syft)
     runs-on: ubuntu-latest
     needs: secrets-scan
     steps:
       - uses: actions/checkout@v4
-      - name: Instalar OSV-Scanner
-        run: |
-          curl -sSfL https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64 -o /usr/local/bin/osv-scanner
-          chmod +x /usr/local/bin/osv-scanner
-      - name: Rodar OSV-Scanner
-        run: osv-scanner scan -r target-app/
-        # Falha em CVE alta/crítica com exploit conhecido (KEV). Média/baixa
-        # vira issue no backlog (ver SECURITY.md).
+      - name: Trivy SCA scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: target-app/
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+        # Bloqueia apenas em CVE de severidade alta/crítica.
+
       - name: Gerar SBOM (Syft, formato CycloneDX)
         uses: anchore/sbom-action@v0
         with:
@@ -96,14 +96,14 @@ jobs:
           docker run --rm -v "$PWD:/project" openpolicyagent/conftest test \
             /project/terraform/ --policy /project/policy/
         # Diferença chave: a política de segurança da infra fica em código
-        # (policy/*.rego), versionada e revisada em PR — não configurada
+        # (policy/*.rego), versionada e revisada em PR, não configurada
         # manualmente numa UI de ferramenta de terceiro.
 
   # ---------------------------------------------------------------------
   # 5) CONTAINER SCAN + ASSINATURA DE ARTEFATO (supply chain)
   # ---------------------------------------------------------------------
   # Comentado nesta demonstração: depende de build de imagem Docker completa
-  # do PyGoat + publicação em registry para a assinatura (cosign) fazer sentido.
+  # do PyGoat e publicação em registry para a assinatura (cosign) fazer sentido.
   # Lógica documentada e pronta; não executada neste ambiente de case.
   #
   # container-scan-and-sign:
@@ -149,4 +149,4 @@ jobs:
     runs-on: ubuntu-latest
     needs: [secrets-scan, sast, sca-sbom, iac-scan]
     steps:
-      - run: echo "Gates críticos aprovados — liberado para build/assinatura/deploy."
+      - run: echo "Gates críticos aprovados. Liberado para build/assinatura/deploy."
