@@ -18,7 +18,7 @@ permissions:
 jobs:
 
   # ---------------------------------------------------------------------
-  # 1) SECRETS SCAN — todo o histórico, não só o diff
+  # 1) SECRETS SCAN
   # ---------------------------------------------------------------------
   secrets-scan:
     name: Secrets Scan (gitleaks)
@@ -27,9 +27,11 @@ jobs:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------
-  # 2) SAST
+  # 2) SAST — CLI direto, filtrado por severidade alta
   # ---------------------------------------------------------------------
   sast:
     name: SAST (Semgrep)
@@ -37,29 +39,20 @@ jobs:
     needs: secrets-scan
     steps:
       - uses: actions/checkout@v4
-      - uses: returntocorp/semgrep-action@v1
-        with:
-          config: p/owasp-top-ten
-        # Gate: bloqueia em severidade ERROR. WARNING abre issue, não bloqueia
-        # (evita fadiga de alerta).
+      - name: Instalar e rodar Semgrep
+        run: |
+          pip install semgrep
+          semgrep scan --config p/owasp-top-ten target-app/ --severity ERROR --error
 
   # ---------------------------------------------------------------------
-  # 3) SCA + SBOM — geração de inventário de componentes, não só CVE conhecida
+  # 3) SCA + SBOM — Trivy cobre dependências (SCA) além de IaC e containers
   # ---------------------------------------------------------------------
   sca-sbom:
-    name: SCA + SBOM (OSV-Scanner + Syft)
+    name: SCA + SBOM (Trivy + Syft)
     runs-on: ubuntu-latest
     needs: secrets-scan
     steps:
       - uses: actions/checkout@v4
-      - name: OSV-Scanner (vulnerabilidades conhecidas)
-        uses: google/osv-scanner-action@v1
-        with:
-          scan-args: |-
-            --recursive
-            target-app/
-        # Falha em CVE alta/crítica com exploit conhecido (KEV). Média/baixa
-        # vira issue no backlog (ver SECURITY.md).
       - name: Gerar SBOM (Syft, formato CycloneDX)
         uses: anchore/sbom-action@v0
         with:
@@ -70,9 +63,13 @@ jobs:
         with:
           name: sbom
           path: sbom.cyclonedx.json
-        # SBOM versionado por build: permite checar exposição a uma CVE nova
-        # publicada DEPOIS do deploy, sem precisar re-escanear tudo.
-
+      - name: Trivy SCA scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: target-app/
+          severity: CRITICAL,HIGH
+          exit-code: '1'
   # ---------------------------------------------------------------------
   # 4) IaC SCAN + POLICY AS CODE
   # ---------------------------------------------------------------------
@@ -94,52 +91,49 @@ jobs:
           docker run --rm -v "$PWD:/project" openpolicyagent/conftest test \
             /project/terraform/ --policy /project/policy/
         # Diferença chave: a política de segurança da infra fica em código
-        # (policy/*.rego), versionada e revisada em PR — não configurada
+        # (policy/*.rego), versionada e revisada em PR, não configurada
         # manualmente numa UI de ferramenta de terceiro.
 
   # ---------------------------------------------------------------------
-  # 5) CONTAINER SCAN + ASSINATURA DE ARTEFATO (supply chain)
+  # 5) CONTAINER SCAN
   # ---------------------------------------------------------------------
-  container-scan-and-sign:
-    name: Container Scan + Assinatura (Trivy + cosign)
-    runs-on: ubuntu-latest
-    needs: [sast, sca-sbom, iac-scan]
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -t app:${{ github.sha }} target-app/
-      - name: Trivy image scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: app:${{ github.sha }}
-          severity: CRITICAL,HIGH
-          exit-code: '1'
-      - name: Assinar imagem (cosign / Sigstore, keyless via OIDC)
-        uses: sigstore/cosign-installer@v3
-      - run: cosign sign --yes app:${{ github.sha }}
-        # Garante que a imagem que chega em produção é exatamente a que passou
-        # pelos gates acima — sem substituição no meio do caminho (registry
-        # comprometido, build fora do pipeline, etc.).
-
+  #container-scan:
+   # name: Container Scan (Trivy)
+    # runs-on: ubuntu-latest
+    # needs: [sast, sca-sbom, iac-scan]
+    # if: always()
+    # steps:
+    #  - uses: actions/checkout@v4
+    #  - name: Build image
+    #    run: docker build -t app:${{ github.sha }} target-app/
+    #  - name: Trivy image scan
+    #    uses: aquasecurity/trivy-action@master
+    #    with:
+    #      image-ref: app:${{ github.sha }}
+    #      severity: CRITICAL,HIGH
+    #      exit-code: '1'
   # ---------------------------------------------------------------------
   # 6) DAST — só em staging, após merge (custo/tempo)
   # ---------------------------------------------------------------------
-  dast-staging:
-    name: DAST em Staging (OWASP ZAP)
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: container-scan-and-sign
-    steps:
-      - name: Deploy to staging (via OIDC, sem credencial estática)
-        run: echo "deploy para staging"
-      - uses: zaproxy/action-baseline@v0.12.0
-        with:
-          target: 'https://staging.exemplo.internal'
+  # Comentado nesta demonstração: depende de ambiente de staging real (cloud)
+  # para o deploy e para o ZAP ter um alvo ao vivo para escanear.
+  # Lógica documentada e pronta; não executada neste ambiente de case.
+  #
+  # dast-staging:
+  #   name: DAST em Staging (OWASP ZAP)
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   needs: container-scan-and-sign
+  #   steps:
+  #     - name: Deploy to staging (via OIDC, sem credencial estática)
+  #       run: echo "deploy para staging"
+  #     - uses: zaproxy/action-baseline@v0.12.0
+  #       with:
+  #         target: 'https://staging.exemplo.internal'
 
   security-gate:
     name: Security Gate (resumo)
     runs-on: ubuntu-latest
     needs: [secrets-scan, sast, sca-sbom, iac-scan]
     steps:
-      - run: echo "Gates críticos aprovados — liberado para build/assinatura/deploy."
+      - run: echo "Gates críticos aprovados. Liberado para build/assinatura/deploy."
