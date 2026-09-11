@@ -1,4 +1,4 @@
-name: Secure SDLC Pipeline
+ame: Secure SDLC Pipeline
 
 # Alvo de demonstração: target-app/ (PyGoat, clonado separadamente - ver README).
 # Todo PR para main passa por todos os gates antes do merge ser liberado
@@ -101,6 +101,7 @@ jobs:
     name: Container Scan (Trivy)
     runs-on: ubuntu-latest
     needs: [sast, sca-sbom, iac-scan]
+    if: always()
     steps:
       - uses: actions/checkout@v4
       - name: Build image
