@@ -1,4 +1,4 @@
-ame: Secure SDLC Pipeline
+name: Secure SDLC Pipeline
 
 # Alvo de demonstração: target-app/ (PyGoat, clonado separadamente - ver README).
 # Todo PR para main passa por todos os gates antes do merge ser liberado
