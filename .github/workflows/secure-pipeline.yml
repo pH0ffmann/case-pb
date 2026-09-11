@@ -53,15 +53,6 @@ jobs:
     needs: secrets-scan
     steps:
       - uses: actions/checkout@v4
-      - name: Trivy SCA scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: target-app/
-          severity: CRITICAL,HIGH
-          exit-code: '1'
-        # Bloqueia apenas em CVE de severidade alta/crítica.
-
       - name: Gerar SBOM (Syft, formato CycloneDX)
         uses: anchore/sbom-action@v0
         with:
@@ -72,9 +63,13 @@ jobs:
         with:
           name: sbom
           path: sbom.cyclonedx.json
-        # SBOM versionado por build: permite checar exposição a uma CVE nova
-        # publicada DEPOIS do deploy, sem precisar re-escanear tudo.
-
+      - name: Trivy SCA scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: target-app/
+          severity: CRITICAL,HIGH
+          exit-code: '1'
   # ---------------------------------------------------------------------
   # 4) IaC SCAN + POLICY AS CODE
   # ---------------------------------------------------------------------
