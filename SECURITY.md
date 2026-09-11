@@ -35,6 +35,5 @@ publicada depois do deploy, sem re-escanear tudo do zero.
 
 ## 3. Integridade de artefato (supply chain)
 
-- Toda imagem publicada é assinada via Sigstore/cosign (keyless, via OIDC).
 - SBOM (CycloneDX) gerado e versionado por build, permitindo auditoria de
   componentes independente de a CVE já existir no momento do build.
