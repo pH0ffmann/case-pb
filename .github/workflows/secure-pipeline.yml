@@ -38,12 +38,10 @@ jobs:
     needs: secrets-scan
     steps:
       - uses: actions/checkout@v4
-      - uses: returntocorp/semgrep-action@v1
-        with:
-          config: p/owasp-top-ten
-        # Gate: bloqueia em severidade ERROR. WARNING abre issue, não bloqueia
-        # (evita fadiga de alerta).
-
+      - name: Instalar e rodar Semgrep
+        run: |
+          pip install semgrep
+          semgrep scan --config p/owasp-top-ten target-app/ --error
   # ---------------------------------------------------------------------
   # 3) SCA + SBOM — geração de inventário de componentes, não só CVE conhecida
   # ---------------------------------------------------------------------
