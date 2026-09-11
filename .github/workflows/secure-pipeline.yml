@@ -100,42 +100,47 @@ jobs:
   # ---------------------------------------------------------------------
   # 5) CONTAINER SCAN + ASSINATURA DE ARTEFATO (supply chain)
   # ---------------------------------------------------------------------
-  container-scan-and-sign:
-    name: Container Scan + Assinatura (Trivy + cosign)
-    runs-on: ubuntu-latest
-    needs: [sast, sca-sbom, iac-scan]
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -t app:${{ github.sha }} target-app/
-      - name: Trivy image scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: app:${{ github.sha }}
-          severity: CRITICAL,HIGH
-          exit-code: '1'
-      - name: Assinar imagem (cosign / Sigstore, keyless via OIDC)
-        uses: sigstore/cosign-installer@v3
-      - run: cosign sign --yes app:${{ github.sha }}
-        # Garante que a imagem que chega em produção é exatamente a que passou
-        # pelos gates acima — sem substituição no meio do caminho (registry
-        # comprometido, build fora do pipeline, etc.).
+  # Comentado nesta demonstração: depende de build de imagem Docker completa
+  # do PyGoat + publicação em registry para a assinatura (cosign) fazer sentido.
+  # Lógica documentada e pronta; não executada neste ambiente de case.
+  #
+  # container-scan-and-sign:
+  #   name: Container Scan + Assinatura (Trivy + cosign)
+  #   runs-on: ubuntu-latest
+  #   needs: [sast, sca-sbom, iac-scan]
+  #   if: github.ref == 'refs/heads/main'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Build image
+  #       run: docker build -t app:${{ github.sha }} target-app/
+  #     - name: Trivy image scan
+  #       uses: aquasecurity/trivy-action@master
+  #       with:
+  #         image-ref: app:${{ github.sha }}
+  #         severity: CRITICAL,HIGH
+  #         exit-code: '1'
+  #     - name: Assinar imagem (cosign / Sigstore, keyless via OIDC)
+  #       uses: sigstore/cosign-installer@v3
+  #     - run: cosign sign --yes app:${{ github.sha }}
 
   # ---------------------------------------------------------------------
   # 6) DAST — só em staging, após merge (custo/tempo)
   # ---------------------------------------------------------------------
-  dast-staging:
-    name: DAST em Staging (OWASP ZAP)
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: container-scan-and-sign
-    steps:
-      - name: Deploy to staging (via OIDC, sem credencial estática)
-        run: echo "deploy para staging"
-      - uses: zaproxy/action-baseline@v0.12.0
-        with:
-          target: 'https://staging.exemplo.internal'
+  # Comentado nesta demonstração: depende de ambiente de staging real (cloud)
+  # para o deploy e para o ZAP ter um alvo ao vivo para escanear.
+  # Lógica documentada e pronta; não executada neste ambiente de case.
+  #
+  # dast-staging:
+  #   name: DAST em Staging (OWASP ZAP)
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   needs: container-scan-and-sign
+  #   steps:
+  #     - name: Deploy to staging (via OIDC, sem credencial estática)
+  #       run: echo "deploy para staging"
+  #     - uses: zaproxy/action-baseline@v0.12.0
+  #       with:
+  #         target: 'https://staging.exemplo.internal'
 
   security-gate:
     name: Security Gate (resumo)
